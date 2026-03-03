@@ -81,8 +81,36 @@ val copyReleaseApkToProjectRoot by tasks.registering(Copy::class) {
     }
 }
 
-// Hook copy task to common release-producing tasks.
-// `assembleRelease` is the usual Gradle task, while Flutter tooling may call variant tasks.
-tasks.matching { it.name == "assembleRelease" }.configureEach {
+/**
+ * Hook copy task to common release-producing tasks.
+ *
+ * In CI, different invocations may be used:
+ * - `flutter build apk --release` (Flutter tool orchestrates Gradle tasks)
+ * - `./gradlew assembleRelease`
+ * - `./gradlew bundleRelease`
+ * - Flavor-specific tasks such as `assembleProdRelease`
+ *
+ * To make the artifact location reliable, finalize *any* Release assemble/bundle task
+ * with the copy task.
+ */
+tasks.matching { task ->
+    // Match common Gradle task naming patterns that produce a Release artifact.
+    // We keep it simple and conservative: only Release + assemble/bundle tasks.
+    val n = task.name
+    (n.startsWith("assemble") || n.startsWith("bundle")) && n.endsWith("Release")
+}.configureEach {
     finalizedBy(copyReleaseApkToProjectRoot)
+}
+
+/**
+ * A deterministic task name CI can call to ensure the APK ends up at:
+ *   <flutter_project_root>/app-release.apk
+ *
+ * Note: This does not itself build the APK; it validates that the Flutter-produced
+ * APK exists and then copies it to the project root.
+ */
+tasks.register("ciReleaseApk") {
+    group = "build"
+    description = "Copies Flutter's release APK to the Flutter project root as app-release.apk (expects it already built)."
+    dependsOn(copyReleaseApkToProjectRoot)
 }
