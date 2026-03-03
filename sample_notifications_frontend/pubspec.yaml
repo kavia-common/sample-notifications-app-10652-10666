@@ -39,6 +39,13 @@ dependencies:
   intl: ^0.19.0
   cupertino_icons: ^1.0.8
 
+  # Firebase Cloud Messaging (FCM)
+  firebase_core: ^3.1.0
+  firebase_messaging: ^15.0.0
+
+  # Show local notifications for foreground + data-only push messages
+  flutter_local_notifications: ^17.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
