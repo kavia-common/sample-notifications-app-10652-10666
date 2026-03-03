@@ -1,0 +1,28 @@
+# Flutter/Dart/Pub related
+.DS_Store
+.dart_tool/
+.packages
+.pub/
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE / Xcode
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+*.xccheckout
+*.xcuserstate
+xcuserdata/
+DerivedData/
+
+# CocoaPods
+Pods/
+.symlinks/
+Flutter/ephemeral/
+Runner/GeneratedPluginRegistrant.*
+
+# Build
+build/
