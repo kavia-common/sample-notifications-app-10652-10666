@@ -48,17 +48,20 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   """App entry point.
 
-  Initializes Firebase + FCM handlers and sets up Android notification channel
-  and local notifications, then runs the Flutter app.
+  IMPORTANT: Do not trigger permission prompts before `runApp()`.
+
+  Some Android preview/emulator environments can show a permission dialog during
+  cold start that pauses/resumes the Activity while Flutter is still
+  initializing, which may result in a blank/white screen. To avoid this,
+  we start the UI first and run notification/Firebase configuration after the
+  first frame.
   """;
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp();
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-  await _ensureLocalNotificationsInitialized();
-  await _configureFcm();
-
+  // Run the UI immediately; do not await permission prompts before first frame.
   runApp(const MyApp());
 }
 
@@ -240,8 +243,51 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class _HomePage extends StatelessWidget {
+class _HomePage extends StatefulWidget {
   const _HomePage();
+
+  @override
+  State<_HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<_HomePage> {
+  bool _initStarted = false;
+  bool _initFailed = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Ensure we only kick off initialization once.
+    if (_initStarted) return;
+    _initStarted = true;
+
+    // Post-frame: avoids showing permission prompt during cold-start before the
+    // first Flutter frame, which can cause a white screen in some preview envs.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startNotificationInit();
+    });
+  }
+
+  Future<void> _startNotificationInit() async {
+    try {
+      await _ensureLocalNotificationsInitialized();
+      await _configureFcm();
+      if (!mounted) return;
+      setState(() {
+        _initFailed = false;
+      });
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('Post-frame notification init failed: $e');
+        debugPrint('$st');
+      }
+      if (!mounted) return;
+      setState(() {
+        _initFailed = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -249,13 +295,19 @@ class _HomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('sample_notifications_frontend'),
       ),
-      body: const Center(
+      body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text('sample_notifications_frontend App is being generated...'),
-            SizedBox(height: 16),
-            CircularProgressIndicator(),
+            const Text('sample_notifications_frontend App is being generated...'),
+            const SizedBox(height: 16),
+            if (_initFailed)
+              const Text(
+                'Notification setup failed. See logs.',
+                textAlign: TextAlign.center,
+              )
+            else
+              const CircularProgressIndicator(),
           ],
         ),
       ),
