@@ -63,11 +63,21 @@ Future<void> main() async {
 }
 
 Future<void> _ensureLocalNotificationsInitialized() async {
-  // Initialize the plugin (required on Android before showing notifications).
+  // Initialize the plugin (required before showing notifications).
   const AndroidInitializationSettings androidInit =
       AndroidInitializationSettings('@mipmap/ic_launcher');
 
-  const DarwinInitializationSettings iosInit = DarwinInitializationSettings();
+  // For iOS local notifications:
+  // - We'll request permissions explicitly via the plugin (below).
+  // - defaultPresent* ensures foreground notifications can show while app is open.
+  const DarwinInitializationSettings iosInit = DarwinInitializationSettings(
+    requestAlertPermission: false,
+    requestBadgePermission: false,
+    requestSoundPermission: false,
+    defaultPresentAlert: true,
+    defaultPresentBadge: true,
+    defaultPresentSound: true,
+  );
 
   const InitializationSettings initSettings = InitializationSettings(
     android: androidInit,
@@ -84,12 +94,36 @@ Future<void> _ensureLocalNotificationsInitialized() async {
   if (androidPlugin != null) {
     await androidPlugin.createNotificationChannel(_androidNotificationChannel);
   }
+
+  // iOS permission prompt (local notifications). This does NOT require APNs or
+  // an Apple Developer account.
+  final IOSFlutterLocalNotificationsPlugin? iosPlugin =
+      _localNotifications.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+  await iosPlugin?.requestPermissions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  final MacOSFlutterLocalNotificationsPlugin? macPlugin =
+      _localNotifications.resolvePlatformSpecificImplementation<
+          MacOSFlutterLocalNotificationsPlugin>();
+  await macPlugin?.requestPermissions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
 }
 
 Future<void> _configureFcm() async {
+  // Local-notifications-only POC:
+  // Keep FCM wiring in place for Android / future expansion, but do not rely on
+  // iOS APNs/FCM capabilities for this POC.
   final FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-  // Android 13+ and iOS require runtime permission for notifications.
+  // Android 13+ requires runtime permission; iOS permission is handled above via
+  // flutter_local_notifications for this local-only POC.
   final NotificationSettings settings = await messaging.requestPermission(
     alert: true,
     badge: true,
@@ -104,7 +138,7 @@ Future<void> _configureFcm() async {
     debugPrint('FCM permission status: ${settings.authorizationStatus}');
   }
 
-  // Token retrieval (native reference logs token onNewToken()).
+  // Token retrieval (primarily relevant on Android; iOS requires APNs setup).
   final String? token = await messaging.getToken();
   if (kDebugMode) {
     debugPrint('FCM token --> $token');
@@ -118,8 +152,6 @@ Future<void> _configureFcm() async {
   });
 
   // Foreground message handling:
-  // - If message.notification exists -> use it
-  // - Else fall back to data payload keys (title/message)
   FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
     final (title, body) = _extractTitleBody(message);
     await _showLocalNotification(

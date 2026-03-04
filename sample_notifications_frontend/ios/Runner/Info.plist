@@ -61,11 +61,8 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 
-	<!-- Firebase Messaging / APNs notes:
-	     - For iOS 10+, the permission prompt is handled in Dart (firebase_messaging).
-	     - You must still enable Push Notifications capability and Background Modes/Remote notifications.
-	     - If you use "critical alerts" or custom sounds, additional entitlements may be needed. -->
-
-	<!-- Optional: If you need local network access or other iOS permissions, add usage descriptions here. -->
+	<!-- iOS local notifications permission prompt text -->
+	<key>NSUserNotificationUsageDescription</key>
+	<string>This app would like to send you local notifications.</string>
 </dict>
 </plist>
