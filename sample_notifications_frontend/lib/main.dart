@@ -48,13 +48,15 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   """App entry point.
 
-  IMPORTANT: Do not trigger permission prompts before `runApp()`.
+  Preview environments (and some emulators) can behave poorly if we await
+  Firebase init or show permission prompts *before the first Flutter frame*.
+  If an exception occurs during those awaits, the app may appear as a white
+  screen with no visible error.
 
-  Some Android preview/emulator environments can show a permission dialog during
-  cold start that pauses/resumes the Activity while Flutter is still
-  initializing, which may result in a blank/white screen. To avoid this,
-  we start the UI first and run notification/Firebase configuration after the
-  first frame.
+  Strategy:
+  - Render UI immediately via `runApp()`.
+  - Perform Firebase + notification initialization post-frame from the UI,
+    and show a visible error state if anything fails.
   """;
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -75,10 +77,7 @@ Future<void> main() async {
     return false; // allow default handling too
   };
 
-  await Firebase.initializeApp();
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-
-  // Run the UI immediately; do not await permission prompts before first frame.
+  // Never block first frame on async init.
   runApp(const MyApp());
 }
 
@@ -269,7 +268,14 @@ class _HomePage extends StatefulWidget {
 
 class _HomePageState extends State<_HomePage> {
   bool _initStarted = false;
+
+  /// Whether initialization completed successfully.
+  bool _initOk = false;
+
+  /// Whether initialization failed (we show a visible error instead of a blank UI).
   bool _initFailed = false;
+
+  String? _initErrorMessage;
 
   @override
   void didChangeDependencies() {
@@ -279,53 +285,90 @@ class _HomePageState extends State<_HomePage> {
     if (_initStarted) return;
     _initStarted = true;
 
-    // Post-frame: avoids showing permission prompt during cold-start before the
+    // Post-frame: avoids permission prompts / heavy init during cold-start before the
     // first Flutter frame, which can cause a white screen in some preview envs.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startNotificationInit();
+      _startInitPipeline();
     });
   }
 
-  Future<void> _startNotificationInit() async {
+  Future<void> _startInitPipeline() async {
     try {
+      // Firebase init can fail in misconfigured preview environments. Never let
+      // that prevent UI from rendering; instead show an error state.
+      await Firebase.initializeApp();
+
+      // Register background handler only after Firebase is available.
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
       await _ensureLocalNotificationsInitialized();
       await _configureFcm();
+
       if (!mounted) return;
       setState(() {
+        _initOk = true;
         _initFailed = false;
+        _initErrorMessage = null;
       });
     } catch (e, st) {
       if (kDebugMode) {
-        debugPrint('Post-frame notification init failed: $e');
+        debugPrint('Post-frame init failed: $e');
         debugPrint('$st');
       }
       if (!mounted) return;
       setState(() {
+        _initOk = false;
         _initFailed = true;
+        _initErrorMessage = e.toString();
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final Widget statusWidget;
+    if (_initFailed) {
+      statusWidget = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Text(
+            'Initialization failed.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _initErrorMessage ?? 'Unknown error',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    } else if (_initOk) {
+      statusWidget = const Text(
+        'App is ready. Send an FCM push to see a notification.',
+        textAlign: TextAlign.center,
+      );
+    } else {
+      statusWidget = const CircularProgressIndicator();
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('sample_notifications_frontend'),
       ),
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Text('sample_notifications_frontend App is being generated...'),
-            const SizedBox(height: 16),
-            if (_initFailed)
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
               const Text(
-                'Notification setup failed. See logs.',
+                'sample_notifications_frontend',
                 textAlign: TextAlign.center,
-              )
-            else
-              const CircularProgressIndicator(),
-          ],
+              ),
+              const SizedBox(height: 16),
+              statusWidget,
+            ],
+          ),
         ),
       ),
     );
