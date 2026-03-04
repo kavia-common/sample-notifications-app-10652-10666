@@ -4,6 +4,10 @@ To enable FCM on Android, place your Firebase config file here:
 
   android/app/google-services.json
 
+Important:
+- The `google-services.json` currently in this repository may be a placeholder/dummy file.
+- FCM will NOT work until you replace it with a real config downloaded from Firebase Console for your app id/package name.
+
 You can download it from Firebase Console:
 Project settings -> Your apps -> Android app -> "google-services.json"
 
