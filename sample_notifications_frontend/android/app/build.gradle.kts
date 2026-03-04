@@ -58,4 +58,26 @@ flutter {
 }
 
 /**
+ * Ensure a stable APK location for external tooling.
+ *
+ * Flutter outputs the release APK at:
+ *   build/app/outputs/flutter-apk/app-release.apk
+ *
+ * Some preview/build systems expect it at the Flutter project root:
+ *   app-release.apk
+ */
+tasks.register<Exec>("copyFlutterReleaseApkToProjectRoot") {
+    // Run from the Flutter project root (android/app is two levels down)
+    workingDir = file("${project.projectDir}/../..")
+    commandLine("bash", "-lc", "chmod +x tool/copy_release_apk.sh && tool/copy_release_apk.sh")
+}
+
+// After any *Release* assemble task, copy the APK to project root.
+tasks.configureEach {
+    if (name.lowercase().startsWith("assemble") && name.lowercase().endsWith("release")) {
+        finalizedBy("copyFlutterReleaseApkToProjectRoot")
+    }
+}
+
+/**
 
