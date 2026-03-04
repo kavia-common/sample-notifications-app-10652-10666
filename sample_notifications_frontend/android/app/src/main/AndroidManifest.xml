@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Android 13+ requires this permission to show notifications and to request permission at runtime. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="sample_notifications_frontend"
         android:name="${applicationName}"

@@ -58,6 +58,23 @@ Future<void> main() async {
   """;
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Log framework and platform errors so a failure doesn't manifest as a silent
+  // white screen in preview environments.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    if (kDebugMode) {
+      debugPrint('FlutterError: ${details.exception}');
+      debugPrint('${details.stack}');
+    }
+  };
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    if (kDebugMode) {
+      debugPrint('Uncaught platform error: $error');
+      debugPrint('$stack');
+    }
+    return false; // allow default handling too
+  };
+
   await Firebase.initializeApp();
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
