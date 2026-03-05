@@ -398,77 +398,96 @@ class _HomePageState extends State<_HomePage> {
       appBar: AppBar(
         title: const Text('sample_notifications_frontend'),
       ),
-      body: Center(
-        child: Padding(
+      body: SafeArea(
+        child: ListView(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              const Text(
-                'sample_notifications_frontend (FCM token UI enabled)',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              statusWidget,
-              const SizedBox(height: 20),
+          children: <Widget>[
+            const Text(
+              'sample_notifications_frontend (FCM token UI enabled)',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Center(child: statusWidget),
+            const SizedBox(height: 20),
 
-              // Keep token visible in preview for easy copy/paste testing.
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: StreamBuilder<String?>(
-                    stream: _fcmTokenStreamController.stream,
-                    builder: (BuildContext context, AsyncSnapshot<String?> snap) {
-                      final String? token = snap.data;
-                      final String tokenDisplay = (token == null || token.isEmpty)
-                          ? 'Fetching token… (or unavailable on this device)'
-                          : token;
+            // Keep token visible in preview for easy copy/paste testing.
+            //
+            // Important: Use a scrollable layout so long tokens (or small devices)
+            // never cause this card/copy button to be pushed off-screen or clipped.
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: StreamBuilder<String?>(
+                  stream: _fcmTokenStreamController.stream,
+                  builder: (BuildContext context, AsyncSnapshot<String?> snap) {
+                    final String? token = snap.data;
+                    final bool tokenReady = token != null && token.isNotEmpty;
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              const Expanded(
-                                child: Text(
-                                  'FCM registration token',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
+                    final String tokenDisplay = tokenReady
+                        ? token
+                        : (_initFailed
+                            ? 'Token unavailable because initialization failed.'
+                            : 'Fetching token… (or unavailable on this device)');
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            const Expanded(
+                              child: Text(
+                                'FCM registration token',
+                                style: TextStyle(fontWeight: FontWeight.w600),
                               ),
-                              IconButton(
-                                tooltip: 'Copy token',
-                                onPressed: (token == null || token.isEmpty)
-                                    ? null
-                                    : () async {
-                                        await Clipboard.setData(
-                                          ClipboardData(text: token),
+                            ),
+                            IconButton(
+                              tooltip: 'Copy token',
+                              onPressed: tokenReady
+                                  ? () {
+                                      // Avoid widget operations after an async gap:
+                                      // copy to clipboard without awaiting, then show UI feedback.
+                                      Clipboard.setData(
+                                        ClipboardData(text: token),
+                                      );
+                                      ScaffoldMessenger.of(context)
+                                        ..clearSnackBars()
+                                        ..showSnackBar(
+                                          const SnackBar(
+                                            content:
+                                                Text('Token copied to clipboard'),
+                                          ),
                                         );
-                                        if (!context.mounted) return;
-                                        ScaffoldMessenger.of(context)
-                                          ..clearSnackBars()
-                                          ..showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Token copied to clipboard'),
-                                            ),
-                                          );
-                                      },
-                                icon: const Icon(Icons.copy),
-                              ),
-                            ],
-                          ),
+                                    }
+                                  : null,
+                              icon: const Icon(Icons.copy),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          tokenDisplay,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        if (!tokenReady) ...<Widget>[
                           const SizedBox(height: 8),
-                          SelectableText(
-                            tokenDisplay,
-                            style: const TextStyle(fontSize: 12),
+                          Text(
+                            'If this persists on an emulator/preview, Google Play services / Firebase setup may be unavailable.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withAlpha(170),
+                            ),
                           ),
                         ],
-                      );
-                    },
-                  ),
+                      ],
+                    );
+                  },
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
