@@ -1,0 +1,7 @@
+This project renders UI immediately and runs Firebase/notifications initialization post-frame
+to avoid blank/white preview screens caused by early async init failures.
+
+If preview appears blank:
+- Check logs for "Post-frame init failed"
+- Verify android/app/google-services.json matches applicationId
+- Confirm notification permissions prompts are not blocking first frame
