@@ -3,7 +3,7 @@
 Flutter demo for **actionable notifications + deep-link navigation**:
 - FCM receiving via `firebase_messaging`
 - Local notifications + **action buttons** via `flutter_local_notifications`
-- Deep links (`myapp://...`) via `uni_links`
+- Deep links (`myapp://...`) via `app_links`
 - Navigation via `go_router`
 
 ## Deep links supported
