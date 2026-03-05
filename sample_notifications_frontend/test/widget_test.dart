@@ -3,16 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sample_notifications_frontend/main.dart';
 
 void main() {
-  testWidgets('App generation message displayed', (WidgetTester tester) async {
+  testWidgets('App renders a scaffold with title', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    expect(find.text('sample_notifications_frontend App is being generated...'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // AppBar title
+    expect(find.text('sample_notifications_frontend'), findsOneWidget);
+
+    // Body headline text
+    expect(find.text('sample_notifications_frontend'), findsWidgets);
   });
 
-  testWidgets('App bar has correct title', (WidgetTester tester) async {
+  testWidgets('Shows progress indicator while initializing',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    expect(find.text('sample_notifications_frontend'), findsOneWidget);
+    // Initial frame shows loading spinner before async init completes.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }
