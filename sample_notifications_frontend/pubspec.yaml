@@ -45,6 +45,7 @@ dependencies:
 
   # Show local notifications for foreground + data-only push messages
   flutter_local_notifications: ^17.1.2
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:

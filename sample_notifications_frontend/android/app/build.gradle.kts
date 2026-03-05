@@ -8,9 +8,10 @@ plugins {
 
 android {
     namespace = "com.example.sample_notifications_frontend"
-        ndkVersion = "27.0.12077973"
+    // Flutter plugins used by this project require this NDK version.
+    // Keeping it pinned avoids build failures due to mismatched NDK versions.
+    ndkVersion = "27.0.12077973"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -69,7 +70,10 @@ flutter {
 tasks.register<Exec>("copyFlutterReleaseApkToProjectRoot") {
     // Run from the Flutter project root (android/app is two levels down)
     workingDir = file("${project.projectDir}/../..")
-    commandLine("bash", "-lc", "chmod +x tool/copy_release_apk.sh && tool/copy_release_apk.sh")
+
+    // Avoid chmod: in some sandboxed build environments the workspace is mounted
+    // with restrictions that make chmod fail. Running via bash is sufficient.
+    commandLine("bash", "tool/copy_release_apk.sh")
 }
 
 // After any *Release* assemble task, copy the APK to project root.
