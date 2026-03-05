@@ -18,6 +18,16 @@ const String kActionOpenOrders = 'OPEN_ORDERS';
 const String _kPayloadDefaultDeepLink = 'defaultDeepLink';
 const String _kPayloadActionMap = 'actionMap';
 
+/// Background callback for notification taps/actions.
+///
+/// flutter_local_notifications requires the background handler to be a top-level
+/// or static function, and it must be marked as an entry-point so it is not
+/// tree-shaken in release builds.
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse response) {
+  NotificationService.instance.handleNotificationResponse(response);
+}
+
 /// Small helper DTO for an emitted deep-link event.
 class DeepLinkEvent {
   const DeepLinkEvent({
@@ -49,9 +59,22 @@ class NotificationService {
   final StreamController<DeepLinkEvent> _deepLinkEvents =
       StreamController<DeepLinkEvent>.broadcast();
 
+  /// Events can occur *before* the app has attached a listener (e.g. cold start
+  /// from notification tap). Buffer them and let the router coordinator drain.
+  final List<DeepLinkEvent> _pendingEvents = <DeepLinkEvent>[];
+
   /// PUBLIC_INTERFACE
   /// Stream of deep-link events emitted by notification taps or action button taps.
   Stream<DeepLinkEvent> get deepLinkEvents => _deepLinkEvents.stream;
+
+  /// PUBLIC_INTERFACE
+  /// Returns and clears any buffered deep-link events that arrived before a
+  /// listener was attached (typical for cold start / early init).
+  List<DeepLinkEvent> drainPendingEvents() {
+    final List<DeepLinkEvent> out = List<DeepLinkEvent>.from(_pendingEvents);
+    _pendingEvents.clear();
+    return out;
+  }
 
   /// PUBLIC_INTERFACE
   /// Initializes notification channels (Android) and categories/actions (iOS),
@@ -107,8 +130,8 @@ class NotificationService {
 
     await _plugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
-      onDidReceiveBackgroundNotificationResponse: _onDidReceiveNotificationResponse,
+      onDidReceiveNotificationResponse: handleNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
 
     // Android channel (O+). Must match the manifest default channel id.
@@ -122,6 +145,14 @@ class NotificationService {
         importance: Importance.low,
       );
       await androidPlatform.createNotificationChannel(channel);
+
+      // Android 13+ requires POST_NOTIFICATIONS permission for local notifications.
+      // (On older Android versions this is a no-op.)
+      try {
+        await androidPlatform.requestNotificationsPermission();
+      } catch (_) {
+        // Non-fatal: some platform builds may not support the call.
+      }
     }
 
     // Permissions (local notifications). FCM permission is requested elsewhere.
@@ -132,6 +163,19 @@ class NotificationService {
     final MacOSFlutterLocalNotificationsPlugin? macPlatform =
         _plugin.resolvePlatformSpecificImplementation<MacOSFlutterLocalNotificationsPlugin>();
     await macPlatform?.requestPermissions(alert: true, badge: true, sound: true);
+
+    // Cold-start from a notification tap: capture and emit/buffer it.
+    try {
+      final NotificationAppLaunchDetails? details = await _plugin.getNotificationAppLaunchDetails();
+      final NotificationResponse? response = details?.notificationResponse;
+      if (details?.didNotificationLaunchApp == true && response != null) {
+        handleNotificationResponse(response);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('getNotificationAppLaunchDetails failed (non-fatal): $e');
+      }
+    }
 
     _initialized = true;
   }
@@ -220,7 +264,16 @@ class NotificationService {
     );
   }
 
-  void _onDidReceiveNotificationResponse(NotificationResponse response) {
+  /// PUBLIC_INTERFACE
+  /// Handles notification tap/action callbacks from flutter_local_notifications.
+  ///
+  /// This must be safe to call from:
+  /// - foreground isolate (normal app runtime)
+  /// - background callback entry-point (Android)
+  ///
+  /// It emits (or buffers) a DeepLinkEvent that DeepLinkCoordinator will turn into
+  /// go_router navigation.
+  void handleNotificationResponse(NotificationResponse response) {
     final String? payload = response.payload;
     if (payload == null || payload.isEmpty) return;
 
@@ -240,6 +293,7 @@ class NotificationService {
 
     final String actionId = response.actionId ?? '';
     String? chosen;
+    String source;
 
     // Version-compatible default tap detection:
     // - Some plugin versions do NOT expose NotificationResponse.defaultActionId.
@@ -249,29 +303,31 @@ class NotificationService {
 
     if (isDefaultTap || actionId.isEmpty) {
       chosen = defaultDeepLink;
-      if (chosen != null && chosen.trim().isNotEmpty) {
-        _deepLinkEvents.add(
-          DeepLinkEvent(rawDeepLink: chosen, source: 'notification_tap'),
-        );
+      source = 'notification_tap';
+    } else {
+      final String? mapped = actionMap[actionId] as String?;
+      chosen = mapped?.trim();
+      source = 'notification_action:$actionId';
+
+      // Fallback: if action link missing, fall back to defaultDeepLink (if present).
+      if (chosen == null || chosen.isEmpty) {
+        chosen = defaultDeepLink?.trim();
+        source = 'notification_action_fallback';
       }
+    }
+
+    if (chosen == null || chosen.trim().isEmpty) return;
+
+    final DeepLinkEvent event = DeepLinkEvent(rawDeepLink: chosen.trim(), source: source);
+
+    // If the coordinator isn't yet listening (common on cold start), buffer the
+    // event so the coordinator can drain it after it attaches.
+    if (!_deepLinkEvents.hasListener) {
+      _pendingEvents.add(event);
       return;
     }
 
-    final String? mapped = actionMap[actionId] as String?;
-    if (mapped != null && mapped.trim().isNotEmpty) {
-      chosen = mapped.trim();
-      _deepLinkEvents.add(
-        DeepLinkEvent(rawDeepLink: chosen, source: 'notification_action:$actionId'),
-      );
-      return;
-    }
-
-    // Fallback: if action link missing, fall back to defaultDeepLink (if present).
-    if (defaultDeepLink != null && defaultDeepLink.trim().isNotEmpty) {
-      _deepLinkEvents.add(
-        DeepLinkEvent(rawDeepLink: defaultDeepLink.trim(), source: 'notification_action_fallback'),
-      );
-    }
+    _deepLinkEvents.add(event);
   }
 
   List<_ActionSpec> _extractActionSpecs(Map<String, dynamic> data) {

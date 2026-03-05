@@ -44,12 +44,26 @@ class DeepLinkCoordinator {
       _router.go(location);
     });
 
+    // Drain any buffered notification deep links that arrived before we attached
+    // the listener (common for cold-start from notification tap).
+    final List<DeepLinkEvent> pending = _notificationService.drainPendingEvents();
+    for (final DeepLinkEvent event in pending) {
+      final String? location = event.routerLocation;
+      if (location != null) {
+        if (kDebugMode) {
+          debugPrint('DeepLinkCoordinator: draining pending -> $location from ${event.source}');
+        }
+        _router.go(location);
+      }
+    }
+
     // Cold start deep link (terminated -> opened via URL).
     try {
       final Uri? initial = await _appLinks.getInitialLink();
       final String? initialStr = initial?.toString().trim();
       if (initialStr != null && initialStr.isNotEmpty) {
-        final DeepLinkEvent event = DeepLinkEvent(rawDeepLink: initialStr, source: 'app_links_initial');
+        final DeepLinkEvent event =
+            DeepLinkEvent(rawDeepLink: initialStr, source: 'app_links_initial');
         final String? location = event.routerLocation;
         if (location != null) {
           _router.go(location);
