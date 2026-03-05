@@ -405,7 +405,7 @@ class _HomePageState extends State<_HomePage> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               const Text(
-                'sample_notifications_frontend',
+                'sample_notifications_frontend (FCM token UI enabled)',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
