@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 /// Android notification channel values mirrored from the native Android reference:
@@ -14,6 +15,13 @@ const String kAndroidChannelName = 'hardik';
 
 final FlutterLocalNotificationsPlugin _localNotifications =
     FlutterLocalNotificationsPlugin();
+
+/// Broadcast stream for the latest FCM registration token.
+///
+/// Kept global so background/foreground init paths can publish updates, while
+/// UI consumes it via `StreamBuilder` and stays updated on token refresh.
+final StreamController<String?> _fcmTokenStreamController =
+    StreamController<String?>.broadcast();
 
 /// A low-importance notification channel to match the native Kotlin implementation
 /// (IMPORTANCE_LOW with vibration and green lights).
@@ -162,10 +170,13 @@ Future<void> _configureFcm() async {
   try {
     final String? token =
         await messaging.getToken().timeout(const Duration(seconds: 6));
+    _fcmTokenStreamController.add(token);
     if (kDebugMode) {
       debugPrint('FCM token --> $token');
     }
   } catch (e) {
+    // Keep UI visible even if token isn't available.
+    _fcmTokenStreamController.add(null);
     if (kDebugMode) {
       debugPrint('FCM token retrieval failed (non-fatal): $e');
     }
@@ -173,6 +184,7 @@ Future<void> _configureFcm() async {
 
   // Token refresh handling
   messaging.onTokenRefresh.listen((String newToken) {
+    _fcmTokenStreamController.add(newToken);
     if (kDebugMode) {
       debugPrint('FCM token refreshed --> $newToken');
     }
@@ -398,6 +410,63 @@ class _HomePageState extends State<_HomePage> {
               ),
               const SizedBox(height: 16),
               statusWidget,
+              const SizedBox(height: 20),
+
+              // Keep token visible in preview for easy copy/paste testing.
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: StreamBuilder<String?>(
+                    stream: _fcmTokenStreamController.stream,
+                    builder: (BuildContext context, AsyncSnapshot<String?> snap) {
+                      final String? token = snap.data;
+                      final String tokenDisplay = (token == null || token.isEmpty)
+                          ? 'Fetching token… (or unavailable on this device)'
+                          : token;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              const Expanded(
+                                child: Text(
+                                  'FCM registration token',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Copy token',
+                                onPressed: (token == null || token.isEmpty)
+                                    ? null
+                                    : () async {
+                                        await Clipboard.setData(
+                                          ClipboardData(text: token),
+                                        );
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                          ..clearSnackBars()
+                                          ..showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Token copied to clipboard'),
+                                            ),
+                                          );
+                                      },
+                                icon: const Icon(Icons.copy),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          SelectableText(
+                            tokenDisplay,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
             ],
           ),
         ),
