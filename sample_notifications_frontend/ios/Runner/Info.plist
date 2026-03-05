@@ -64,5 +64,18 @@
 	<!-- iOS local notifications permission prompt text -->
 	<key>NSUserNotificationUsageDescription</key>
 	<string>This app would like to send you local notifications.</string>
+
+	<!-- Deep links: myapp://orders, myapp://chat?threadId=42 -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.example.sample_notifications_frontend</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>myapp</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
