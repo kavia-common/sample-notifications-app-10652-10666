@@ -16,12 +16,25 @@ const String kAndroidChannelName = 'hardik';
 final FlutterLocalNotificationsPlugin _localNotifications =
     FlutterLocalNotificationsPlugin();
 
-/// Broadcast stream for the latest FCM registration token.
+class _FcmTokenState {
+  const _FcmTokenState({
+    required this.token,
+    required this.errorMessage,
+  });
+
+  final String? token;
+  final String? errorMessage;
+
+  bool get hasToken => token != null && token!.isNotEmpty;
+  bool get hasError => errorMessage != null && errorMessage!.isNotEmpty;
+}
+
+/// Broadcast stream for the latest FCM registration token + any actionable error.
 ///
 /// Kept global so background/foreground init paths can publish updates, while
 /// UI consumes it via `StreamBuilder` and stays updated on token refresh.
-final StreamController<String?> _fcmTokenStreamController =
-    StreamController<String?>.broadcast();
+final StreamController<_FcmTokenState> _fcmTokenStreamController =
+    StreamController<_FcmTokenState>.broadcast();
 
 /// A low-importance notification channel to match the native Kotlin implementation
 /// (IMPORTANCE_LOW with vibration and green lights).
@@ -170,13 +183,36 @@ Future<void> _configureFcm() async {
   try {
     final String? token =
         await messaging.getToken().timeout(const Duration(seconds: 6));
-    _fcmTokenStreamController.add(token);
+
+    if (token == null || token.isEmpty) {
+      _fcmTokenStreamController.add(
+        const _FcmTokenState(
+          token: null,
+          errorMessage:
+              'FCM returned no token. This commonly happens on emulators/preview '
+              'devices without Google Play services.',
+        ),
+      );
+    } else {
+      _fcmTokenStreamController.add(_FcmTokenState(token: token, errorMessage: null));
+    }
+
     if (kDebugMode) {
       debugPrint('FCM token --> $token');
     }
   } catch (e) {
     // Keep UI visible even if token isn't available.
-    _fcmTokenStreamController.add(null);
+    _fcmTokenStreamController.add(
+      _FcmTokenState(
+        token: null,
+        errorMessage:
+            'Token retrieval failed: $e\n\n'
+            'Most common causes:\n'
+            '• Running on an emulator/preview image without Google Play services\n'
+            '• Firebase config mismatch (google-services.json vs applicationId)\n'
+            '• Network restrictions in the runtime environment',
+      ),
+    );
     if (kDebugMode) {
       debugPrint('FCM token retrieval failed (non-fatal): $e');
     }
@@ -184,7 +220,7 @@ Future<void> _configureFcm() async {
 
   // Token refresh handling
   messaging.onTokenRefresh.listen((String newToken) {
-    _fcmTokenStreamController.add(newToken);
+    _fcmTokenStreamController.add(_FcmTokenState(token: newToken, errorMessage: null));
     if (kDebugMode) {
       debugPrint('FCM token refreshed --> $newToken');
     }
@@ -417,17 +453,23 @@ class _HomePageState extends State<_HomePage> {
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: StreamBuilder<String?>(
+                child: StreamBuilder<_FcmTokenState>(
                   stream: _fcmTokenStreamController.stream,
-                  builder: (BuildContext context, AsyncSnapshot<String?> snap) {
-                    final String? token = snap.data;
-                    final bool tokenReady = token != null && token.isNotEmpty;
+                  builder: (BuildContext context,
+                      AsyncSnapshot<_FcmTokenState> snap) {
+                    final _FcmTokenState state =
+                        snap.data ?? const _FcmTokenState(token: null, errorMessage: null);
+
+                    final bool tokenReady = state.hasToken;
+                    final bool showInitFailedMessage = _initFailed && !state.hasError;
 
                     final String tokenDisplay = tokenReady
-                        ? token
-                        : (_initFailed
+                        ? state.token!
+                        : (showInitFailedMessage
                             ? 'Token unavailable because initialization failed.'
-                            : 'Fetching token… (or unavailable on this device)');
+                            : (state.hasError
+                                ? state.errorMessage!
+                                : 'Fetching token… (or unavailable on this device)'));
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -447,14 +489,13 @@ class _HomePageState extends State<_HomePage> {
                                       // Avoid widget operations after an async gap:
                                       // copy to clipboard without awaiting, then show UI feedback.
                                       Clipboard.setData(
-                                        ClipboardData(text: token),
+                                        ClipboardData(text: state.token!),
                                       );
                                       ScaffoldMessenger.of(context)
                                         ..clearSnackBars()
                                         ..showSnackBar(
                                           const SnackBar(
-                                            content:
-                                                Text('Token copied to clipboard'),
+                                            content: Text('Token copied to clipboard'),
                                           ),
                                         );
                                     }
@@ -466,12 +507,32 @@ class _HomePageState extends State<_HomePage> {
                         const SizedBox(height: 8),
                         SelectableText(
                           tokenDisplay,
-                          style: const TextStyle(fontSize: 12),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: state.hasError
+                                ? Theme.of(context).colorScheme.error
+                                : null,
+                          ),
                         ),
                         if (!tokenReady) ...<Widget>[
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 10),
                           Text(
-                            'If this persists on an emulator/preview, Google Play services / Firebase setup may be unavailable.',
+                            'Troubleshooting:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withAlpha(200),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '• If you are using an emulator/preview (e.g., Appetize), it may not include Google Play services. '
+                            'Use a real device or a Play-Store-enabled emulator.\n'
+                            '• Verify android/app/google-services.json exists and its package_name matches the Android applicationId.\n'
+                            '• Ensure the device has internet connectivity.',
                             style: TextStyle(
                               fontSize: 12,
                               color: Theme.of(context)
