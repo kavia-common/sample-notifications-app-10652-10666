@@ -157,10 +157,18 @@ Future<void> _configureFcm() async {
     debugPrint('FCM permission status: ${settings.authorizationStatus}');
   }
 
-  // Token retrieval (primarily relevant on Android; iOS requires APNs setup).
-  final String? token = await messaging.getToken();
-  if (kDebugMode) {
-    debugPrint('FCM token --> $token');
+  // Token retrieval can throw/hang in some preview/emulator setups (esp. when
+  // Google Play services are not fully available). Do not allow it to blank UI.
+  try {
+    final String? token =
+        await messaging.getToken().timeout(const Duration(seconds: 6));
+    if (kDebugMode) {
+      debugPrint('FCM token --> $token');
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      debugPrint('FCM token retrieval failed (non-fatal): $e');
+    }
   }
 
   // Token refresh handling
@@ -188,10 +196,17 @@ Future<void> _configureFcm() async {
   });
 
   // If the app was launched by tapping a notification while terminated.
-  final RemoteMessage? initialMessage = await messaging.getInitialMessage();
-  if (initialMessage != null && kDebugMode) {
-    debugPrint('App launched from terminated by notification: '
-        '${initialMessage.data}');
+  try {
+    final RemoteMessage? initialMessage =
+        await messaging.getInitialMessage().timeout(const Duration(seconds: 4));
+    if (initialMessage != null && kDebugMode) {
+      debugPrint('App launched from terminated by notification: '
+          '${initialMessage.data}');
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      debugPrint('getInitialMessage failed (non-fatal): $e');
+    }
   }
 }
 
@@ -294,21 +309,37 @@ class _HomePageState extends State<_HomePage> {
 
   Future<void> _startInitPipeline() async {
     try {
-      // Firebase init can fail in misconfigured preview environments. Never let
-      // that prevent UI from rendering; instead show an error state.
-      await Firebase.initializeApp();
+      // In preview environments, permission prompts + plugin init can hang or throw
+      // (e.g., missing Google Play services, transient binder issues).
+      // Use timeouts so the UI never gets stuck on an indefinite spinner/blank.
+      await Firebase.initializeApp().timeout(const Duration(seconds: 10));
 
       // Register background handler only after Firebase is available.
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-      await _ensureLocalNotificationsInitialized();
-      await _configureFcm();
+      await _ensureLocalNotificationsInitialized()
+          .timeout(const Duration(seconds: 10));
+
+      // Important: requesting permissions can trigger OS UI and is the common repro
+      // point. Bound it with a timeout and treat failures as non-fatal to rendering.
+      await _configureFcm().timeout(const Duration(seconds: 12));
 
       if (!mounted) return;
       setState(() {
         _initOk = true;
         _initFailed = false;
         _initErrorMessage = null;
+      });
+    } on TimeoutException catch (e) {
+      if (kDebugMode) {
+        debugPrint('Post-frame init timed out: $e');
+      }
+      if (!mounted) return;
+      setState(() {
+        _initOk = false;
+        _initFailed = true;
+        _initErrorMessage =
+            'Initialization timed out (preview/device permission UI may have stalled).';
       });
     } catch (e, st) {
       if (kDebugMode) {
