@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../notifications/notification_service.dart';
 import '../notifications/push_manager.dart';
@@ -12,26 +13,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String? _token;
-  String? _tokenError;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadToken();
-  }
-
-  Future<void> _loadToken() async {
-    // Async context rule: do not use context after await.
-    final String? token = await PushManager.instance.getToken();
-    if (!mounted) return;
-    setState(() {
-      _token = token;
-      _tokenError = token == null || token.isEmpty
-          ? 'Token unavailable (common on emulators/preview without Google Play services).'
-          : null;
-    });
-  }
+  String? _snackMessage;
 
   Future<void> _triggerLocalTestNotification() async {
     // No UI calls after await except primitive state changes (we do none).
@@ -46,9 +28,39 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _copyToken(String token) async {
+    await Clipboard.setData(ClipboardData(text: token));
+    if (!mounted) return;
+    setState(() {
+      _snackMessage = 'FCM token copied to clipboard';
+    });
+  }
+
+  Future<void> _refreshToken() async {
+    // Triggers a new getToken() call and updates PushManager.tokenNotifier.
+    await PushManager.instance.getToken();
+    if (!mounted) return;
+    setState(() {
+      _snackMessage = 'Token refreshed (if available)';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final String tokenDisplay = _tokenError ?? (_token ?? 'Fetching token…');
+    final String? snackMessage = _snackMessage;
+    if (snackMessage != null) {
+      // Show snackbars from build (not after await) to avoid "context across async gap".
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(snackMessage)),
+        );
+        if (mounted) {
+          setState(() {
+            _snackMessage = null;
+          });
+        }
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -74,21 +86,57 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    const Text(
-                      'FCM token',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    Row(
+                      children: <Widget>[
+                        const Expanded(
+                          child: Text(
+                            'FCM device token',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _refreshToken,
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Refresh'),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
-                    SelectableText(
-                      tokenDisplay,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: _tokenError == null ? null : Theme.of(context).colorScheme.error,
-                      ),
+                    ValueListenableBuilder<String?>(
+                      valueListenable: PushManager.instance.tokenNotifier,
+                      builder: (BuildContext context, String? token, Widget? child) {
+                        final bool hasToken = token != null && token.isNotEmpty;
+
+                        final String displayText = hasToken
+                            ? token
+                            : 'Fetching token…\n'
+                                'If this stays empty, FCM may not be available on this device/emulator '
+                                '(e.g., missing Google Play services).';
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            SelectableText(
+                              displayText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.25,
+                                color: hasToken ? null : Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: hasToken ? () => _copyToken(token) : null,
+                              icon: const Icon(Icons.copy),
+                              label: const Text('Copy token'),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Tip: Use the local trigger above to test actions without a server.',
+                      'Paste this token into Firebase Console → Messaging → Send test message.',
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).colorScheme.onSurface.withAlpha(170),

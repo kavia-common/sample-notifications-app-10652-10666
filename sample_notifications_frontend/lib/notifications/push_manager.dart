@@ -17,6 +17,14 @@ class PushManager {
 
   bool _initialized = false;
 
+  /// Holds the latest known FCM registration token (if available) so the UI can
+  /// listen and update immediately (including onTokenRefresh events).
+  ///
+  /// PUBLIC_INTERFACE
+  final ValueNotifier<String?> tokenNotifier = ValueNotifier<String?>(null);
+
+  StreamSubscription<String>? _tokenRefreshSub;
+
   /// PUBLIC_INTERFACE
   /// Background handler: must be a top-level or static entry point.
   @pragma('vm:entry-point')
@@ -73,6 +81,19 @@ class PushManager {
       debugPrint('FCM permission status: ${settings.authorizationStatus}');
     }
 
+    // Fetch token once at startup and store it so UI can show it without needing
+    // to poll.
+    tokenNotifier.value = await getToken();
+
+    // Keep token updated across refreshes (this is the critical part for
+    // "token refresh updates the UI").
+    _tokenRefreshSub ??= messaging.onTokenRefresh.listen((String token) {
+      tokenNotifier.value = token;
+      if (kDebugMode) {
+        debugPrint('FCM token refreshed: $token');
+      }
+    });
+
     // Foreground -> show a local notification with actions (so user can act).
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       final Map<String, dynamic> data = <String, dynamic>{
@@ -120,7 +141,10 @@ class PushManager {
   /// Retrieves the current FCM token (may be null on environments without Play Services).
   Future<String?> getToken() async {
     try {
-      return await FirebaseMessaging.instance.getToken().timeout(const Duration(seconds: 6));
+      final String? token =
+          await FirebaseMessaging.instance.getToken().timeout(const Duration(seconds: 6));
+      tokenNotifier.value = token;
+      return token;
     } catch (_) {
       return null;
     }
