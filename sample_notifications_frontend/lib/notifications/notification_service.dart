@@ -59,11 +59,14 @@ class NotificationService {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    const AndroidInitializationSettings androidInit =
+    final AndroidInitializationSettings androidInit =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
     // iOS: categories with actions (2 buttons).
-    const DarwinNotificationCategory generalCategory = DarwinNotificationCategory(
+    //
+    // NOTE: We intentionally avoid `const` here because the `flutter_local_notifications`
+    // plugin has had constructor const-ness differences across versions.
+    final DarwinNotificationCategory generalCategory = DarwinNotificationCategory(
       kNotificationCategoryGeneral,
       actions: <DarwinNotificationAction>[
         DarwinNotificationAction.plain(
@@ -87,7 +90,7 @@ class NotificationService {
       },
     );
 
-    const DarwinInitializationSettings iosInit = DarwinInitializationSettings(
+    final DarwinInitializationSettings iosInit = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
       requestSoundPermission: false,
@@ -97,7 +100,7 @@ class NotificationService {
       notificationCategories: <DarwinNotificationCategory>[generalCategory],
     );
 
-    const InitializationSettings initSettings = InitializationSettings(
+    final InitializationSettings initSettings = InitializationSettings(
       android: androidInit,
       iOS: iosInit,
     );
@@ -238,7 +241,13 @@ class NotificationService {
     final String actionId = response.actionId ?? '';
     String? chosen;
 
-    if (actionId.isEmpty || actionId == NotificationResponse.defaultActionId) {
+    // Version-compatible default tap detection:
+    // - Some plugin versions do NOT expose NotificationResponse.defaultActionId.
+    // - `notificationResponseType` is the safest way to distinguish main tap vs action tap.
+    final bool isDefaultTap =
+        response.notificationResponseType == NotificationResponseType.selectedNotification;
+
+    if (isDefaultTap || actionId.isEmpty) {
       chosen = defaultDeepLink;
       if (chosen != null && chosen.trim().isNotEmpty) {
         _deepLinkEvents.add(
