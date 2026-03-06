@@ -32,10 +32,17 @@ class DeepLinkParser {
 
     // Accept our custom scheme deep links.
     if (uri.scheme == 'myapp') {
-      // For "myapp://orders" -> host is "orders", path is empty.
-      // For "myapp://chat?threadId=42" -> host is "chat".
-      final String route = uri.host.isNotEmpty ? '/${uri.host}' : uri.path;
-      final String normalizedRoute = route.startsWith('/') ? route : '/$route';
+      // myapp://orders           -> host=orders path=''       => /orders
+      // myapp://orders/123       -> host=orders path='/123'   => /orders/123
+      // myapp://chat?threadId=42 -> host=chat   path=''       => /chat?threadId=42
+      //
+      // IMPORTANT: For custom schemes, Uri.host carries the "first segment" after
+      // the scheme. Uri.path contains the remaining segments (prefixed with '/').
+      final String hostPart = uri.host.trim();
+      final String pathPart = uri.path.trim();
+
+      final String combined = hostPart.isNotEmpty ? '/$hostPart$pathPart' : pathPart;
+      final String normalizedRoute = combined.startsWith('/') ? combined : '/$combined';
 
       final String query = uri.query;
       if (query.isEmpty) return normalizedRoute;

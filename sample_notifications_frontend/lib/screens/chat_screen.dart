@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class ChatScreen extends StatefulWidget {
   /// PUBLIC_INTERFACE
-  const ChatScreen({super.key, required this.threadId});
+  const ChatScreen({super.key, this.threadId});
 
   final String? threadId;
 
