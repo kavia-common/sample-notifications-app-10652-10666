@@ -208,8 +208,21 @@ class NotificationService {
     final String body = (data['body'] as String?)?.trim() ?? '';
 
     final String? defaultDeepLink = (data['defaultDeepLink'] as String?)?.trim();
+
+    // IMPORTANT:
+    // `flutter_local_notifications` uses an integer `id` to update/replace existing
+    // notifications. If IDs collide, subsequent notifications overwrite earlier ones.
+    //
+    // Previous code used seconds-based fallback (millis ~/ 1000) which collides when
+    // multiple notifications are shown in the same second (e.g. repeated order placed
+    // notifications). Use a millisecond-based fallback and clamp to 32-bit int to
+    // stay safe across Android implementations.
     final int id = int.tryParse((data['notificationId'] as String?) ?? '') ??
-        DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        (DateTime.now().millisecondsSinceEpoch & 0x7fffffff);
+
+    // Optional: provide an Android tag so notifications are uniquely addressable
+    // even if the same numeric ID is reused for different events.
+    final String? androidTag = (data['notificationTag'] as String?)?.trim();
 
     final List<_ActionSpec> actions = _extractActionSpecs(data);
 
@@ -237,9 +250,6 @@ class NotificationService {
               a.title,
               // Ensures the app UI is brought forward on action tap.
               showsUserInterface: true,
-              // Important: make each action intent unique.
-              // The plugin internally handles uniqueness but stable IDs help.
-              // (Acceptance criteria mentions unique PendingIntents.)
               cancelNotification: true,
             ),
           )
@@ -254,6 +264,18 @@ class NotificationService {
       android: androidDetails,
       iOS: iosDetails,
     );
+
+    if (androidTag != null && androidTag.isNotEmpty) {
+      await _plugin.show(
+        id,
+        title,
+        body,
+        details,
+        payload: payload,
+        tag: androidTag,
+      );
+      return;
+    }
 
     await _plugin.show(
       id,

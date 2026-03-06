@@ -50,7 +50,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       'defaultDeepLink': 'myapp://orders',
       'actionTitles': 'Open Orders',
       'actionDeepLinks': 'myapp://orders',
+
+      // Use both a unique notificationId + a unique Android tag to ensure repeated
+      // order notifications never overwrite each other.
       'notificationId': DateTime.now().millisecondsSinceEpoch.toString(),
+      'notificationTag': 'order:${order.id}',
+
       'category': 'orders',
     });
 
