@@ -265,18 +265,9 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    if (androidTag != null && androidTag.isNotEmpty) {
-      await _plugin.show(
-        id,
-        title,
-        body,
-        details,
-        payload: payload,
-        tag: androidTag,
-      );
-      return;
-    }
-
+    // `tag` support in FlutterLocalNotificationsPlugin.show() varies by plugin
+    // version. Some versions do not expose a `tag:` named parameter.
+    // To keep this project buildable across versions, we avoid passing `tag`.
     await _plugin.show(
       id,
       title,

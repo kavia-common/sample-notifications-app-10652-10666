@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 import '../notifications/push_manager.dart';
 
@@ -30,6 +31,16 @@ class _TokenScreenState extends State<TokenScreen> {
     });
   }
 
+  // PUBLIC_INTERFACE
+  void _goHome() {
+    """Navigate to the Home route ('/').
+
+    This is used by the AppBar back button to ensure consistent "back-to-home"
+    behavior regardless of how the Token screen was reached (including deep links).
+    """;
+    context.go('/');
+  }
+
   @override
   Widget build(BuildContext context) {
     final String? snackMessage = _snackMessage;
@@ -48,6 +59,11 @@ class _TokenScreenState extends State<TokenScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _goHome,
+        ),
         title: const Text('Device Token'),
       ),
       body: SafeArea(
