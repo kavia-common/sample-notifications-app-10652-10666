@@ -32,6 +32,10 @@ class _ChatScreenState extends State<ChatScreen> {
   // Local-only demo data. This keeps the UI functional without adding backend deps.
   final List<_ChatMessage> _messages = <_ChatMessage>[];
 
+  // Prevent re-entrant navigation when both PopScope and AppBar back (or rapid
+  // repeated back presses) try to trigger navigation.
+  bool _isExiting = false;
+
   @override
   void initState() {
     super.initState();
@@ -97,14 +101,16 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _exitToHome(BuildContext context) {
-    // If Chat is on top of an existing stack, force Home as the landing page.
-    // If Chat is the only route (e.g., cold-start deep link straight into chat),
-    // allow system back to close the app rather than trapping the user.
-    if (Navigator.of(context).canPop()) {
-      context.go('/');
-      return;
-    }
-    Navigator.of(context).maybePop();
+    // IMPORTANT:
+    // For go_router apps, using Navigator.canPop/maybePop here can be misleading
+    // because go_router manages a separate route stack. In some deep-link
+    // scenarios, that can create a loop where "back" never resolves and can
+    // lead to an ANR after repeated presses.
+    //
+    // Requirement: Back from Chat should always land on Home.
+    if (_isExiting) return;
+    _isExiting = true;
+    context.go('/');
   }
 
   @override
@@ -112,6 +118,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final ColorScheme colors = Theme.of(context).colorScheme;
 
     return PopScope(
+      // We fully handle "back" ourselves to avoid inconsistent behavior between
+      // the system back gesture and the AppBar leading button.
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? result) {
         if (didPop) return;
