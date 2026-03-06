@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../ecommerce/models/product.dart';
+import '../ecommerce/state/cart_state.dart';
+import '../ecommerce/state/product_state.dart';
+import '../ecommerce/utils/money.dart';
 import '../notifications/notification_service.dart';
-import '../notifications/push_manager.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   /// PUBLIC_INTERFACE
   const HomeScreen({super.key});
 
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  String? _snackMessage;
-
   Future<void> _triggerLocalTestNotification() async {
-    // No UI calls after await except primitive state changes (we do none).
+    // No UI calls after await.
     await NotificationService.instance.showNotificationFromData(<String, dynamic>{
       'title': 'New message',
       'body': 'You have a new chat message',
@@ -28,122 +25,173 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _copyToken(String token) async {
-    await Clipboard.setData(ClipboardData(text: token));
-    if (!mounted) return;
-    setState(() {
-      _snackMessage = 'FCM token copied to clipboard';
-    });
-  }
-
-  Future<void> _refreshToken() async {
-    // Triggers a new getToken() call and updates PushManager.tokenNotifier.
-    await PushManager.instance.getToken();
-    if (!mounted) return;
-    setState(() {
-      _snackMessage = 'Token refreshed (if available)';
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final String? snackMessage = _snackMessage;
-    if (snackMessage != null) {
-      // Show snackbars from build (not after await) to avoid "context across async gap".
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(snackMessage)),
-        );
-        if (mounted) {
-          setState(() {
-            _snackMessage = null;
-          });
-        }
-      });
-    }
+    final List<Product> products = context.select<ProductState, List<Product>>(
+      (ProductState s) => s.products,
+    );
+    final int cartCount = context.select<CartState, int>((CartState c) => c.itemCount);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('sample_notifications_frontend'),
+        title: const Text('Shop'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Token',
+            onPressed: () => context.go('/token'),
+            icon: const Icon(Icons.key),
+          ),
+          Stack(
+            alignment: Alignment.center,
+            children: <Widget>[
+              IconButton(
+                tooltip: 'Cart',
+                onPressed: () => context.go('/cart'),
+                icon: const Icon(Icons.shopping_cart_outlined),
+              ),
+              if (cartCount > 0)
+                Positioned(
+                  right: 6,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$cartCount',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          IconButton(
+            tooltip: 'Orders',
+            onPressed: () => context.go('/orders'),
+            icon: const Icon(Icons.receipt_long_outlined),
+          ),
+        ],
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           children: <Widget>[
-            const Text(
-              'Actionable notifications + deep links demo',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _triggerLocalTestNotification,
-              child: const Text('Trigger local test notification (2 actions)'),
-            ),
-            const SizedBox(height: 16),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: Row(
                   children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        const Expanded(
-                          child: Text(
-                            'FCM device token',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: _refreshToken,
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: const Text('Refresh'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ValueListenableBuilder<String?>(
-                      valueListenable: PushManager.instance.tokenNotifier,
-                      builder: (BuildContext context, String? token, Widget? child) {
-                        final bool hasToken = token != null && token.isNotEmpty;
-
-                        final String displayText = hasToken
-                            ? token
-                            : 'Fetching token…\n'
-                                'If this stays empty, FCM may not be available on this device/emulator '
-                                '(e.g., missing Google Play services).';
-
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            SelectableText(
-                              displayText,
-                              style: TextStyle(
-                                fontSize: 13,
-                                height: 1.25,
-                                color: hasToken ? null : Theme.of(context).colorScheme.error,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            FilledButton.icon(
-                              onPressed: hasToken ? () => _copyToken(token) : null,
-                              icon: const Icon(Icons.copy),
-                              label: const Text('Copy token'),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Paste this token into Firebase Console → Messaging → Send test message.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurface.withAlpha(170),
+                    const Expanded(
+                      child: Text(
+                        'Demo: actionable notifications + deep links are still enabled.',
+                        style: TextStyle(fontWeight: FontWeight.w600),
                       ),
+                    ),
+                    TextButton(
+                      onPressed: _triggerLocalTestNotification,
+                      child: const Text('Test notification'),
                     ),
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Products',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            ...products.map((Product p) => _ProductTile(product: p)),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductTile extends StatelessWidget {
+  const _ProductTile({required this.product});
+
+  final Product product;
+
+  @override
+  Widget build(BuildContext context) {
+    final CartState cart = context.watch<CartState>();
+    final int qty = cart.quantityFor(product.id);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                product.imageUrl,
+                width: 84,
+                height: 84,
+                fit: BoxFit.cover,
+                errorBuilder: (BuildContext context, Object error, StackTrace? st) {
+                  return Container(
+                    width: 84,
+                    height: 84,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.image_not_supported_outlined),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    product.name,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    product.description,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface.withAlpha(170),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    Money.formatCents(cents: product.priceCents, currencyCode: product.currencyCode),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: <Widget>[
+                      FilledButton.icon(
+                        onPressed: () => cart.add(product, quantity: 1),
+                        icon: const Icon(Icons.add_shopping_cart),
+                        label: Text(qty > 0 ? 'Add more' : 'Add to cart'),
+                      ),
+                      const SizedBox(width: 12),
+                      if (qty > 0)
+                        Text(
+                          'In cart: $qty',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface.withAlpha(180),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
