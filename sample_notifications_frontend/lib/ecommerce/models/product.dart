@@ -32,8 +32,10 @@ class Product {
 
   factory Product.fromJson(Map<String, dynamic> json) {
     final Object? tagsRaw = json['tags'];
+
+    // Ensure the result is strongly typed as List<String> (avoids List<dynamic> inference).
     final List<String> tags = tagsRaw is List
-        ? tagsRaw.map((Object e) => e.toString()).toList()
+        ? (tagsRaw.cast<dynamic>()).map((dynamic e) => e.toString()).toList(growable: false)
         : const <String>[];
 
     return Product(
