@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class ChatScreen extends StatefulWidget {
   /// PUBLIC_INTERFACE
@@ -95,44 +96,67 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _exitToHome(BuildContext context) {
+    // If Chat is on top of an existing stack, force Home as the landing page.
+    // If Chat is the only route (e.g., cold-start deep link straight into chat),
+    // allow system back to close the app rather than trapping the user.
+    if (Navigator.of(context).canPop()) {
+      context.go('/');
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chat'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(28),
-          child: Padding(
-            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 10),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'threadId=$_threadLabel',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: colors.onSurface.withAlpha(160),
-                    ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        _exitToHome(context);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: 'Back',
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => _exitToHome(context),
+          ),
+          title: const Text('Chat'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(28),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'threadId=$_threadLabel',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colors.onSurface.withAlpha(160),
+                      ),
+                ),
               ),
             ),
           ),
         ),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: _MessageList(
-                controller: _listController,
-                messages: _messages,
+        body: SafeArea(
+          child: Column(
+            children: <Widget>[
+              Expanded(
+                child: _MessageList(
+                  controller: _listController,
+                  messages: _messages,
+                ),
               ),
-            ),
-            const Divider(height: 1),
-            _Composer(
-              controller: _composerController,
-              onSend: _sendCurrentText,
-            ),
-          ],
+              const Divider(height: 1),
+              _Composer(
+                controller: _composerController,
+                onSend: _sendCurrentText,
+              ),
+            ],
+          ),
         ),
       ),
     );
