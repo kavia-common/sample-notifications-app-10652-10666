@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Added to satisfy resource merge when flutter_launcher_icons creates adaptive icon colors. -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>
