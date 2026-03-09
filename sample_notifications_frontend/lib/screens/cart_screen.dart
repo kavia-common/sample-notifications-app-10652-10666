@@ -15,8 +15,23 @@ class CartScreen extends StatelessWidget {
     final CartState cart = context.watch<CartState>();
     final List<CartItem> items = cart.items;
 
+    // PUBLIC_INTERFACE
+    void goHome() {
+      """Navigate to the Home route ('/').
+
+      This mirrors TokenScreen behavior so the Cart back button always returns
+      to Home regardless of how the Cart screen was reached.
+      """;
+      context.go('/');
+    }
+
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+          icon: const Icon(Icons.arrow_back),
+          onPressed: goHome,
+        ),
         title: const Text('Cart'),
         actions: <Widget>[
           if (items.isNotEmpty)
